@@ -3,7 +3,7 @@ export async function checkLocation(officeLat, officeLng, radiusMeters){
   const position = await new Promise((resolve,reject)=>{
     navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true});
   });
-  const {latitude:lat,lng:lng} = position.coords;
+  const {latitude:lat,longitude:lng} = position.coords;
   const distance = haversineDistance(lat,lng,officeLat,officeLng);
   return distance <= radiusMeters;
 }
