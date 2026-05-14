@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>ARR Attendance Mobile Web App</title>
+  <style>
+    body{font-family:system-ui;margin:0;padding:0;background:#f5f9fa;display:flex;flex-direction:column;height:100vh;}
+    #app{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;}
+    .step {margin-bottom:15px;text-align:center;font-weight:bold;color:#555;}
+    .checkmark{color:green;font-size:2rem;display:none;}
+  </style>
+</head>
+<body>
+<div id="app">
+  <div class="step" id="stepIndicator">Step 1 of 3: Check Location</div>
+  <button id="location-check-btn">Check Location</button>
+  <div id="geolocation-status"></div>
+  <form id="id-form" style="display:none;">
+    <label for="employee-id">Employee ID:</label>
+    <input type="text" id="employee-id" required />
+    <button type="submit">Confirm</button>
+  </form>
+  <div id="camera-section" style="display:none;">
+    <video id="cam-video" width="320" height="240" autoplay muted></video>
+    <button id="capture-btn">Capture Face</button>
+  </div>
+  <div id="result" style="display:none;"></div>
+  <a id="download-link" href="#" download="attendance.csv" style="display:none;">Download Attendance Log</a>
+</div>
+<script type="module">
+import { checkLocation } from './src/services/geolocation.js';
+import { initCamera, captureImage } from './src/services/cameraCapture.js';
+import { initFaceAPI, compareFaces } from './src/lib/facenet.js';
+import { logAttendance, downloadCSV } from './src/services/csvLogger.js';
+
+const officeLat = 13.77591720691935, 
+const officeLng = 100.53495484101782;
+let currentStep = 1;
+const stepIndicator=document.getElementById('stepIndicator');
+function setStep(n){currentStep=n;stepIndicator.textContent=`Step ${n} of 3: ${getStepLabel(n)}`;}
+function getStepLabel(n){return ["Check Location","Enter Employee ID","Capture Face"][n-1];}
+
+document.getElementById('location-check-btn').addEventListener('click', async ()=>{
+  setStep(2);
+  const ok = await checkLocation(officeLat, officeLng,15);
+  document.getElementById('geolocation-status').textContent=ok?"Within 15m. Good.":"Outside allowed radius. Aborting.";
+  if(!ok){return;}
+  document.getElementById('id-form').style.display='block';
+});
+
+document.getElementById('id-form').addEventListener('submit',e=>{
+  e.preventDefault();
+  setStep(3);
+  document.getElementById('camera-section').style.display='block';
+  initCamera();
+});
+
+const captureBtn=document.getElementById('capture-btn');
+captureBtn.addEventListener('click', async ()=>{
+  const imgBlob=await captureImage();
+  await initFaceAPI();
+  const id=document.getElementById('employee-id').value;
+  const match=await compareFaces(imgBlob,id);
+  if(match){
+    document.getElementById('result').style.display='block';
+    document.getElementById('result').textContent='Attendance logged!';
+    logAttendance(id,new Date().toISOString());
+    downloadCSV();
+  }else{
+    document.getElementById('result').style.display='block';
+    document.getElementById('result').textContent='Face not recognized. Reject.';
+  }
+});
+</script>
+</body>
+</html>
