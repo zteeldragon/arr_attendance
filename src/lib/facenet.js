@@ -1,4 +1,4 @@
-// Minimal face comparison placeholder using face-api.js if available
+// Face comparison using face-api.js for detection + cropped face comparison
 let modelsLoaded = false;
 export async function initFaceAPI(){
   if (modelsLoaded) return;
@@ -22,6 +22,16 @@ export async function compareFaces(imageBlob, employeeId){
 
   console.log(`compareFaces: employeeId=${employeeId}, portraits=${portraits.join(',')}`);
 
+  // Detect and crop face from captured image (removes background)
+  let croppedFace = null;
+  try {
+    croppedFace = await getCroppedFace(imageBlob);
+    console.log('Captured face cropped successfully');
+  } catch (err) {
+    console.warn('Could not crop captured face:', err.message);
+    // Fall through - will use full image as fallback
+  }
+
   // Try to compare against each portrait; skip ones that fail to load
   let bestScore = -1;
   const threshold = 0.65;
@@ -30,7 +40,7 @@ export async function compareFaces(imageBlob, employeeId){
   for (const portraitName of portraits) {
     const url = `assets/images/${portraitName}`;
     try {
-      const score = await compareImageWithPortrait(imageBlob, url);
+      const score = await compareImageWithPortrait(croppedFace, url);
       triedCount++;
       console.log(`Portrait ${portraitName}: score=${score.toFixed(3)}`);
       if (score > bestScore) bestScore = score;
@@ -46,7 +56,6 @@ export async function compareFaces(imageBlob, employeeId){
 
   if (triedCount === 0) {
     console.error('compareFaces: NO portraits could be loaded at all');
-    // Return a visible error indicator by appending to result div
     const resultEl = document.getElementById('result');
     if (resultEl) {
       resultEl.style.display = 'block';
@@ -60,9 +69,49 @@ export async function compareFaces(imageBlob, employeeId){
   return match;
 }
 
-async function compareImageWithPortrait(imageBlob, portraitUrl){
-  const img1 = await loadImageFromBlob(imageBlob);
-  const img2 = await loadExternalImage(portraitUrl);
+// Detect face and crop to face region only (removes background)
+async function getCroppedFace(imageBlob){
+  if (typeof faceapi === 'undefined') {
+    throw new Error('face-api.js not loaded');
+  }
+  const img = await loadImageFromBlob(imageBlob);
+  const detection = await faceapi.detectSingleFace(img).withFaceLandmarks();
+  if (!detection) {
+    throw new Error('No face detected in captured image');
+  }
+
+  const box = detection.box;
+  // Add padding around face (20% margin)
+  const padX = Math.floor(box.width * 0.2);
+  const padY = Math.floor(box.height * 0.2);
+  const x = Math.max(0, box.x - padX);
+  const y = Math.max(0, box.y - padY);
+  const w = Math.min(img.naturalWidth - x, box.width + padX * 2);
+  const h = Math.min(img.naturalHeight - y, box.height + padY * 2);
+
+  // Draw cropped face region to canvas and return as blob
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, x, y, w, h, 0, 0, w, h);
+
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.95);
+  });
+}
+
+async function compareImageWithPortrait(croppedFaceBlob, portraitUrl){
+  // Load the cropped face (or full image if cropping failed)
+  const img1 = await loadImageFromBlob(croppedFaceBlob);
+
+  // Load and crop portrait face region too
+  let img2;
+  if (typeof faceapi !== 'undefined' && modelsLoaded) {
+    img2 = await loadAndCropPortrait(portraitUrl);
+  } else {
+    img2 = await loadExternalImage(portraitUrl);
+  }
 
   console.log(`[compare] loaded: img1=${img1?.naturalWidth}x${img1?.naturalHeight}, img2=${img2?.naturalWidth}x${img2?.naturalHeight}`);
 
@@ -123,52 +172,3 @@ async function compareImageWithPortrait(imageBlob, portraitUrl){
 
   const grad1 = gradientMag(m1);
   const grad2 = gradientMag(m2);
-  let gNum = 0, gDen1 = 0, gDen2 = 0;
-  for (let i = 0; i < n; i++) {
-    gNum += grad1[i]*grad2[i]; gDen1 += grad1[i]*grad1[i]; gDen2 += grad2[i]*grad2[i];
-  }
-  const gDen = Math.sqrt(gDen1) * Math.sqrt(gDen2);
-  const gradientMatch = (gDen > 0) ? gNum / gDen : 0;
-
-  // Metric 3: MSE-based score
-  let mse = 0;
-  for (let i = 0; i < n; i++) { const d = m1[i]-m2[i]; mse += d*d; }
-  mse /= n;
-  const mseScore = 1 - Math.min(mse / 10000, 1);
-
-  const combined = corr * 0.5 + gradientMatch * 0.3 + mseScore * 0.2;
-  const finalScore = Math.max(0, Math.min(1, combined));
-
-  console.log(`[compare] corr=${corr.toFixed(3)} grad=${gradientMatch.toFixed(3)} mse=${mseScore.toFixed(3)} -> ${finalScore.toFixed(3)}`);
-  return finalScore;
-}
-
-function loadImageFromBlob(blob){
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Failed to load image from blob'));
-    img.src = URL.createObjectURL(blob);
-  });
-}
-
-function loadExternalImage(url){
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Failed to load external image'));
-    img.src = url;
-  });
-}
-
-export async function detectFace(imageBlob){
-  if (typeof faceapi === 'undefined') {
-    throw new Error('face-api.js not loaded');
-  }
-  const image = await loadImageFromBlob(imageBlob);
-  const detection = await faceapi.detectSingleFace(image).withFaceLandmarks();
-  if (!detection) {
-    throw new Error('No face detected in the image');
-  }
-  return detection;
-}
