@@ -60,12 +60,12 @@ function setStep(n){currentStep=n;stepIndicator.textContent=`Step ${n} of 3: ${g
 function getStepLabel(n){return ["Check Location","Enter Employee ID","Capture Face"][n-1];}
 
 document.getElementById('location-check-btn').addEventListener('click', async ()=>{
-  setStep(2);
   const ok = await checkLocation(officeLat, officeLng,15);
   const statusEl=document.getElementById('geolocation-status');
   statusEl.textContent=ok?"Within 15m. Good.":"Outside allowed radius. Aborting.";
   statusEl.className=ok?'success':'error';
   if(!ok){return;}
+  setStep(2);
   document.getElementById('id-form').style.display='block';
 });
 
@@ -118,16 +118,24 @@ captureBtn.addEventListener('click', async ()=>{
   await initFaceAPI();
   const id=document.getElementById('employee-id').value;
   const resultEl=document.getElementById('result');
-  const match=await compareFaces(imgBlob,id);
-  if(match){
+
+  try {
+    const match = await compareFaces(imgBlob, id);
+    if (match) {
+      resultEl.style.display='block';
+      resultEl.textContent='Attendance logged!';
+      resultEl.className='success';
+      logAttendance(id,new Date().toISOString());
+      downloadCSV();
+    } else {
+      resultEl.style.display='block';
+      resultEl.textContent='Face not recognized. Reject.';
+      resultEl.className='error';
+    }
+  } catch (err) {
+    console.error('Face comparison error:', err);
     resultEl.style.display='block';
-    resultEl.textContent='Attendance logged!';
-    resultEl.className='success';
-    logAttendance(id,new Date().toISOString());
-    downloadCSV();
-  }else{
-    resultEl.style.display='block';
-    resultEl.textContent='Face not recognized. Reject.';
+    resultEl.textContent=`Face comparison failed: ${err.message}`;
     resultEl.className='error';
   }
 });
