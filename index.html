@@ -78,17 +78,17 @@ document.getElementById('id-form').addEventListener('submit', async (e)=>{
   let hasPortraits = false;
 
   for (const img of portraits) {
-    try {
-      await new Promise((resolve) => {
-        const testImg = new Image();
-        testImg.onload = () => { hasPortraits = true; resolve(true); };
-        testImg.onerror = () => { resolve(false); }; // image not found, continue checking
-        testImg.src = `assets/images/${img}?${Date.now()}`; // cache bust
-      });
-    } catch (err) {
-      console.warn(`Image check failed for ${img}:`, err.message);
+    const exists = await new Promise((resolve) => {
+      const testImg = new Image();
+      testImg.onload = () => resolve(true);
+      testImg.onerror = () => resolve(false);
+      testImg.src = `assets/images/${img}?${Date.now()}`; // cache bust
+    });
+    console.log(`Portrait check ${img}: ${exists ? 'EXISTS' : 'NOT FOUND'}`);
+    if (exists) {
+      hasPortraits = true;
+      break;
     }
-    if (hasPortraits) break;
   }
 
   if (!hasPortraits) {
@@ -121,6 +121,7 @@ captureBtn.addEventListener('click', async ()=>{
 
   try {
     const match = await compareFaces(imgBlob, id);
+    console.log(`compareFaces returned: ${match}`);
     if (match) {
       resultEl.style.display='block';
       resultEl.textContent='Attendance logged!';
