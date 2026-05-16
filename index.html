@@ -6,26 +6,32 @@
   <title>ARR Attendance Mobile Web App</title>
   <style>
     * { box-sizing: border-box; }
-    body{font-family:system-ui,-apple-system,sans-serif;margin:0;padding:0;background:#f5f9fa;display:flex;flex-direction:column;height:100vh;-webkit-text-size-adjust:none;}
+    body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;margin:0;padding:0;background:linear-gradient(180deg,#00040c 0%,#001233 40%,#002d5a 70%,#00b4d6 100%);display:flex;flex-direction:column;height:100vh;-webkit-text-size-adjust:none;color:#fff;}
     #app{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px;width:100%;max-width:480px;margin:0 auto;}
-    .step {margin-bottom:20px;text-align:center;font-weight:bold;color:#555;font-size:1.1rem;}
+    .step{margin-bottom:32px;text-align:center;font-weight:600;color:rgba(255,255,255,0.7);font-size:0.95rem;letter-spacing:1px;text-transform:uppercase;}
     #location-check-btn,
     #capture-btn,
-    #id-form button[type="submit"]{width:100%;padding:16px 24px;margin:8px 0;border:none;border-radius:12px;background:#4a90d9;color:#fff;font-size:1.1rem;font-weight:600;cursor:pointer;touch-action:manipulation;-webkit-appearance:none;transition:background .2s;}
+    #id-form button[type="submit"]{width:100%;padding:16px 24px;margin:8px 0;border:none;border-radius:16px;background:rgba(255,255,255,0.1);color:#fff;font-size:1.1rem;font-weight:600;cursor:pointer;touch-action:manipulation;-webkit-appearance:none;transition:background .2s,opacity .2s;backdrop-filter:blur(10px);}
+    #location-check-btn:hover,
+    #capture-btn:hover,
+    #id-form button[type="submit"]:hover{background:rgba(255,255,255,0.18);}
     #location-check-btn:active,
     #capture-btn:active,
-    #id-form button[type="submit"]:active{background:#3a7bc8;}
-    #geolocation-status,#result{text-align:center;margin-top:16px;font-size:1rem;color:#333;min-height:24px;}
-    #geolocation-status.success{color:#2ecc71;font-weight:bold;}
-    #geolocation-status.error{color:#e74c3c;font-weight:bold;}
+    #id-form button[type="submit"]:active{background:rgba(255,255,255,0.06);opacity:0.8;}
+    #location-check-btn[disabled],
+    #location-check-btn:disabled{background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.4);cursor:not-allowed;}
+    #geolocation-status,#result{text-align:center;margin-top:16px;font-size:1rem;min-height:24px;}
+    #geolocation-status.success{color:#34e8a0;font-weight:bold;}
+    #geolocation-status.error{color:#ff6b6b;font-weight:bold;}
     #id-form{width:100%;margin-top:16px;}
-    #id-form label{display:block;margin-bottom:8px;font-size:1rem;color:#555;font-weight:500;}
-    #employee-id{width:100%;padding:14px 16px;margin-bottom:8px;border:2px solid #d0d7de;border-radius:8px;font-size:1.1rem;-webkit-appearance:none;background:#fff;transition:border-color .2s;}
-    #employee-id:focus{border-color:#4a90d9;outline:none;}
+    #id-form label{display:block;margin-bottom:10px;font-size:0.85rem;color:rgba(255,255,255,0.6);font-weight:500;letter-spacing:1.5px;text-transform:uppercase;}
+    #employee-id{width:100%;padding:16px 20px;margin-bottom:8px;border:none;border-radius:16px;font-size:1.1rem;-webkit-appearance:none;background:rgba(255,255,255,0.15);color:#fff;transition:border-color .2s;}
+    #employee-id::placeholder{color:rgba(255,255,255,0.4);}
+    #employee-id:focus{border:none;outline:2px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.2);}
     #camera-section{width:100%;margin-top:20px;text-align:center;}
-    #cam-video{width:100%;max-width:360px;border-radius:12px;background:#333;}
-    #download-link{display:block;margin-top:16px;padding:14px 24px;text-align:center;color:#4a90d9;text-decoration:none;font-size:1rem;border:2px solid #4a90d9;border-radius:8px;transition:background .2s;}
-    #download-link:hover{background:#eef4fa;}
+    #cam-video{width:100%;max-width:360px;border-radius:16px;background:#000;display:block;}
+    #download-link{display:block;margin-top:16px;padding:14px 24px;text-align:center;color:rgba(255,255,255,0.8);text-decoration:none;font-size:1rem;border:2px solid rgba(255,255,255,0.3);border-radius:16px;transition:background .2s;}
+    #download-link:hover{background:rgba(255,255,255,0.1);}
   </style>
 </head>
 <body>
@@ -44,7 +50,7 @@
     <button id="capture-btn">Capture Face</button>
   </div>
   <div id="result" style="display:none;"></div>
-  <div id="debug-log" style="display:none;margin-top:16px;font-size:0.8rem;text-align:left;background:#222;color:#0f0;padding:12px;border-radius:8px;max-height:300px;overflow:auto;word-break:break-all;"></div>
+  <div id="debug-log" style="display:none;margin-top:16px;font-size:0.75rem;text-align:left;background:rgba(0,0,0,0.4);color:#34e8a0;padding:12px;border-radius:12px;max-height:300px;overflow:auto;word-break:break-all;border:1px solid rgba(255,255,255,0.1);"></div>
   <a id="download-link" href="#" download="attendance.csv" style="display:none;">Download Attendance Log</a>
 </div>
 <script type="module">
@@ -62,7 +68,7 @@ if (typeof logAttendance !== 'function') missing.push('logAttendance');
 if (missing.length > 0) {
   console.error('[FATAL] ES module import failed. Missing:', missing.join(', '));
   const app = document.getElementById('app');
-  app.innerHTML = '<h2 style="color:red;">Module Import Failed</h2><p>Missing: ' + missing.join(', ') + '</p><p>This usually means .js files are not served with application/javascript MIME type.</p>';
+  app.innerHTML = '<h2 style="color:#ff6b6b;">Module Import Failed</h2><p style="color:rgba(255,255,255,0.7);">Missing: ' + missing.join(', ') + '</p><p style="color:rgba(255,255,255,0.5);font-size:0.9rem;">This usually means .js files are not served with application/javascript MIME type.</p>';
 }
 
 const officeLat = 13.77591720691935;
@@ -72,12 +78,22 @@ const stepIndicator=document.getElementById('stepIndicator');
 function setStep(n){currentStep=n;stepIndicator.textContent=`Step ${n} of 3: ${getStepLabel(n)}`;}
 function getStepLabel(n){return ["Check Location","Enter Employee ID","Capture Face"][n-1];}
 
-document.getElementById('location-check-btn').addEventListener('click', async ()=>{
+const locationBtn=document.getElementById('location-check-btn');
+locationBtn.addEventListener('click', async ()=>{
+  locationBtn.disabled=true;
+  locationBtn.textContent='Checking location...';
   const ok = await checkLocation(officeLat, officeLng,15);
   const statusEl=document.getElementById('geolocation-status');
-  statusEl.textContent=ok?"Within 15m. Good.":"Outside allowed radius. Aborting.";
-  statusEl.className=ok?'success':'error';
-  if(!ok){return;}
+  if(!ok){
+    statusEl.textContent='Outside allowed radius. Aborting.';
+    statusEl.className='error';
+    locationBtn.disabled=false;
+    locationBtn.textContent='Check Location';
+    return;
+  }
+  statusEl.textContent='Location verified ✓';
+  statusEl.className='success';
+  setTimeout(()=>{statusEl.style.display='none';},2000);
   setStep(2);
   document.getElementById('id-form').style.display='block';
 });
@@ -160,10 +176,4 @@ captureBtn.addEventListener('click', async ()=>{
     console.error('Face comparison error:', err);
     debugEl.textContent += '\n[ERROR] ' + err.message;
     resultEl.style.display='block';
-    resultEl.textContent='Face comparison failed: ' + err.message;
-    resultEl.className='error';
-  }
-});
-</script>
-</body>
-</html>
+    res
