@@ -1,11 +1,16 @@
 export async function checkLocation(officeLat, officeLng, radiusMeters){
   if (!navigator.geolocation) return false;
-  const position = await new Promise((resolve,reject)=>{
-    navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true});
-  });
-  const {latitude:lat,longitude:lng} = position.coords;
-  const distance = haversineDistance(lat,lng,officeLat,officeLng);
-  return distance <= radiusMeters;
+  try {
+    const position = await new Promise((resolve,reject)=>{
+      navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true});
+    });
+    const {latitude:lat, longitude:lng} = position.coords;
+    const distance = haversineDistance(lat,lng,officeLat,officeLng);
+    return distance <= radiusMeters;
+  } catch (e) {
+    console.error('Geolocation error:', e);
+    return false;
+  }
 }
 
 function toRad(x){return x*Math.PI/180;}
