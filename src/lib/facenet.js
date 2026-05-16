@@ -22,6 +22,16 @@ export async function compareFaces(imageBlob, employeeId){
 
   console.log(`compareFaces: employeeId=${employeeId}, portraits=${portraits.join(',')}`);
 
+  // Detect and crop face from captured image (removes background)
+  let croppedFace = null;
+  try {
+    croppedFace = await getCroppedFace(imageBlob);
+    console.log('Captured face cropped successfully');
+  } catch (err) {
+    console.warn('Could not crop captured face:', err.message);
+    // Fall through - will use full image as fallback
+  }
+
   // Try to compare against each portrait; skip ones that fail to load
   let bestScore = -1;
   const threshold = 0.65;
@@ -30,7 +40,7 @@ export async function compareFaces(imageBlob, employeeId){
   for (const portraitName of portraits) {
     const url = `assets/images/${portraitName}`;
     try {
-      const score = await compareImageWithPortrait(imageBlob, url);
+      const score = await compareImageWithPortrait(croppedFace, url);
       triedCount++;
       console.log(`Portrait ${portraitName}: score=${score.toFixed(3)}`);
       if (score > bestScore) bestScore = score;
@@ -60,9 +70,49 @@ export async function compareFaces(imageBlob, employeeId){
   return match;
 }
 
-async function compareImageWithPortrait(imageBlob, portraitUrl){
-  const img1 = await loadImageFromBlob(imageBlob);
-  const img2 = await loadExternalImage(portraitUrl);
+// Detect face and crop to face region only (removes background)
+async function getCroppedFace(imageBlob){
+  if (typeof faceapi === 'undefined') {
+    throw new Error('face-api.js not loaded');
+  }
+  const img = await loadImageFromBlob(imageBlob);
+  const detection = await faceapi.detectSingleFace(img).withFaceLandmarks();
+  if (!detection) {
+    throw new Error('No face detected in captured image');
+  }
+
+  const box = detection.box;
+  // Add padding around face (20% margin)
+  const padX = Math.floor(box.width * 0.2);
+  const padY = Math.floor(box.height * 0.2);
+  const x = Math.max(0, box.x - padX);
+  const y = Math.max(0, box.y - padY);
+  const w = Math.min(img.naturalWidth - x, box.width + padX * 2);
+  const h = Math.min(img.naturalHeight - y, box.height + padY * 2);
+
+  // Draw cropped face region to canvas and return as blob
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, x, y, w, h, 0, 0, w, h);
+
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.95);
+  });
+}
+
+async function compareImageWithPortrait(croppedFaceBlob, portraitUrl){
+  // Load the cropped face (or full image if cropping failed)
+  const img1 = await loadImageFromBlob(croppedFaceBlob);
+
+  // Load and crop portrait face region too
+  let img2;
+  if (typeof faceapi !== 'undefined' && modelsLoaded) {
+    img2 = await loadAndCropPortrait(portraitUrl);
+  } else {
+    img2 = await loadExternalImage(portraitUrl);
+  }
 
   console.log(`[compare] loaded: img1=${img1?.naturalWidth}x${img1?.naturalHeight}, img2=${img2?.naturalWidth}x${img2?.naturalHeight}`);
 
@@ -141,6 +191,38 @@ async function compareImageWithPortrait(imageBlob, portraitUrl){
 
   console.log(`[compare] corr=${corr.toFixed(3)} grad=${gradientMatch.toFixed(3)} mse=${mseScore.toFixed(3)} -> ${finalScore.toFixed(3)}`);
   return finalScore;
+}
+
+// Load portrait and crop to face region only
+async function loadAndCropPortrait(portraitUrl){
+  const img = await loadExternalImage(portraitUrl);
+  const detection = await faceapi.detectSingleFace(img).withFaceLandmarks();
+  if (!detection) {
+    throw new Error('No face detected in portrait');
+  }
+
+  const box = detection.box;
+  // Add padding around face (20% margin)
+  const padX = Math.floor(box.width * 0.2);
+  const padY = Math.floor(box.height * 0.2);
+  const x = Math.max(0, box.x - padX);
+  const y = Math.max(0, box.y - padY);
+  const w = Math.min(img.naturalWidth - x, box.width + padX * 2);
+  const h = Math.min(img.naturalHeight - y, box.height + padY * 2);
+
+  // Create cropped face region via canvas data URL
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, x, y, w, h, 0, 0, w, h);
+
+  return new Promise((resolve, reject) => {
+    const imgClone = new Image();
+    imgClone.onload = () => resolve(imgClone);
+    imgClone.onerror = () => reject(new Error('Failed to load cropped portrait'));
+    imgClone.src = canvas.toDataURL();
+  });
 }
 
 function loadImageFromBlob(blob){
