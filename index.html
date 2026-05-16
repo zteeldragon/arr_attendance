@@ -2,12 +2,30 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>ARR Attendance Mobile Web App</title>
   <style>
-    body{font-family:system-ui;margin:0;padding:0;background:#f5f9fa;display:flex;flex-direction:column;height:100vh;}
-    #app{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;}
-    .step {margin-bottom:15px;text-align:center;font-weight:bold;color:#555;}
-    .checkmark{color:green;font-size:2rem;display:none;}
+    * { box-sizing: border-box; }
+    body{font-family:system-ui,-apple-system,sans-serif;margin:0;padding:0;background:#f5f9fa;display:flex;flex-direction:column;height:100vh;-webkit-text-size-adjust:none;}
+    #app{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px;width:100%;max-width:480px;margin:0 auto;}
+    .step {margin-bottom:20px;text-align:center;font-weight:bold;color:#555;font-size:1.1rem;}
+    #location-check-btn,
+    #capture-btn,
+    #id-form button[type="submit"]{width:100%;padding:16px 24px;margin:8px 0;border:none;border-radius:12px;background:#4a90d9;color:#fff;font-size:1.1rem;font-weight:600;cursor:pointer;touch-action:manipulation;-webkit-appearance:none;transition:background .2s;}
+    #location-check-btn:active,
+    #capture-btn:active,
+    #id-form button[type="submit"]:active{background:#3a7bc8;}
+    #geolocation-status,#result{text-align:center;margin-top:16px;font-size:1rem;color:#333;min-height:24px;}
+    #geolocation-status.success{color:#2ecc71;font-weight:bold;}
+    #geolocation-status.error{color:#e74c3c;font-weight:bold;}
+    #id-form{width:100%;margin-top:16px;}
+    #id-form label{display:block;margin-bottom:8px;font-size:1rem;color:#555;font-weight:500;}
+    #employee-id{width:100%;padding:14px 16px;margin-bottom:8px;border:2px solid #d0d7de;border-radius:8px;font-size:1.1rem;-webkit-appearance:none;background:#fff;transition:border-color .2s;}
+    #employee-id:focus{border-color:#4a90d9;outline:none;}
+    #camera-section{width:100%;margin-top:20px;text-align:center;}
+    #cam-video{width:100%;max-width:360px;border-radius:12px;background:#333;}
+    #download-link{display:block;margin-top:16px;padding:14px 24px;text-align:center;color:#4a90d9;text-decoration:none;font-size:1rem;border:2px solid #4a90d9;border-radius:8px;transition:background .2s;}
+    #download-link:hover{background:#eef4fa;}
   </style>
 </head>
 <body>
@@ -17,11 +35,12 @@
   <div id="geolocation-status"></div>
   <form id="id-form" style="display:none;">
     <label for="employee-id">Employee ID:</label>
-    <input type="text" id="employee-id" required />
+    <input type="text" id="employee-id" placeholder="Enter your employee ID" autocomplete="off" />
     <button type="submit">Confirm</button>
   </form>
   <div id="camera-section" style="display:none;">
-    <video id="cam-video" width="320" height="240" autoplay muted></video>
+    <video id="cam-video" autoplay muted playsinline></video>
+    <br/>
     <button id="capture-btn">Capture Face</button>
   </div>
   <div id="result" style="display:none;"></div>
@@ -43,7 +62,9 @@ function getStepLabel(n){return ["Check Location","Enter Employee ID","Capture F
 document.getElementById('location-check-btn').addEventListener('click', async ()=>{
   setStep(2);
   const ok = await checkLocation(officeLat, officeLng,15);
-  document.getElementById('geolocation-status').textContent=ok?"Within 15m. Good.":"Outside allowed radius. Aborting.";
+  const statusEl=document.getElementById('geolocation-status');
+  statusEl.textContent=ok?"Within 15m. Good.":"Outside allowed radius. Aborting.";
+  statusEl.className=ok?'success':'error';
   if(!ok){return;}
   document.getElementById('id-form').style.display='block';
 });
@@ -71,8 +92,10 @@ document.getElementById('id-form').addEventListener('submit', async (e)=>{
   }
 
   if (!hasPortraits) {
-    document.getElementById('result').style.display='block';
-    document.getElementById('result').textContent=`No portrait found for employee ID: ${id}`;
+    const resultEl=document.getElementById('result');
+    resultEl.style.display='block';
+    resultEl.textContent=`No portrait found for employee ID: ${id}`;
+    resultEl.className='error';
     return;
   }
 
@@ -82,8 +105,10 @@ document.getElementById('id-form').addEventListener('submit', async (e)=>{
     await initCamera();
   } catch (err) {
     console.error('Failed to start camera:', err);
-    document.getElementById('result').style.display='block';
-    document.getElementById('result').textContent='Camera access denied. Please allow camera and try again.';
+    const resultEl=document.getElementById('result');
+    resultEl.style.display='block';
+    resultEl.textContent='Camera access denied. Please allow camera and try again.';
+    resultEl.className='error';
   }
 });
 
@@ -92,15 +117,18 @@ captureBtn.addEventListener('click', async ()=>{
   const imgBlob=await captureImage();
   await initFaceAPI();
   const id=document.getElementById('employee-id').value;
+  const resultEl=document.getElementById('result');
   const match=await compareFaces(imgBlob,id);
   if(match){
-    document.getElementById('result').style.display='block';
-    document.getElementById('result').textContent='Attendance logged!';
+    resultEl.style.display='block';
+    resultEl.textContent='Attendance logged!';
+    resultEl.className='success';
     logAttendance(id,new Date().toISOString());
     downloadCSV();
   }else{
-    document.getElementById('result').style.display='block';
-    document.getElementById('result').textContent='Face not recognized. Reject.';
+    resultEl.style.display='block';
+    resultEl.textContent='Face not recognized. Reject.';
+    resultEl.className='error';
   }
 });
 </script>
