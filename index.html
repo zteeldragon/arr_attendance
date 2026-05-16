@@ -19,7 +19,7 @@
     #capture-btn:active,
     #id-form button[type="submit"]:active{background:rgba(255,255,255,0.06);opacity:0.8;}
     #location-check-btn[disabled],
-    #location-check-btn:disabled{background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.4);cursor:not-allowed;}
+    #location-check-btn:disabled{background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.4);cursor:not-allowed;border-radius:16px;padding:16px 24px;}
     #geolocation-status,#result{text-align:center;margin-top:16px;font-size:1rem;min-height:24px;}
     #geolocation-status.success{color:#34e8a0;font-weight:bold;}
     #geolocation-status.error{color:#ff6b6b;font-weight:bold;}
@@ -82,20 +82,29 @@ const locationBtn=document.getElementById('location-check-btn');
 locationBtn.addEventListener('click', async ()=>{
   locationBtn.disabled=true;
   locationBtn.textContent='Checking location...';
-  const ok = await checkLocation(officeLat, officeLng,15);
-  const statusEl=document.getElementById('geolocation-status');
-  if(!ok){
-    statusEl.textContent='Outside allowed radius. Aborting.';
+  try {
+    const ok = await checkLocation(officeLat, officeLng,15);
+    const statusEl=document.getElementById('geolocation-status');
+    if(!ok){
+      statusEl.textContent='Outside allowed radius. Aborting.';
+      statusEl.className='error';
+      locationBtn.disabled=false;
+      locationBtn.textContent='Check Location';
+      return;
+    }
+    statusEl.textContent='Location verified ✓';
+    statusEl.className='success';
+    setTimeout(()=>{statusEl.style.display='none';},2000);
+    setStep(2);
+    document.getElementById('id-form').style.display='block';
+  } catch (err) {
+    console.error('Location check failed:', err);
+    const statusEl=document.getElementById('geolocation-status');
+    statusEl.textContent='Location check failed. Please try again.';
     statusEl.className='error';
     locationBtn.disabled=false;
     locationBtn.textContent='Check Location';
-    return;
   }
-  statusEl.textContent='Location verified ✓';
-  statusEl.className='success';
-  setTimeout(()=>{statusEl.style.display='none';},2000);
-  setStep(2);
-  document.getElementById('id-form').style.display='block';
 });
 
 document.getElementById('id-form').addEventListener('submit', async (e)=>{
@@ -176,4 +185,10 @@ captureBtn.addEventListener('click', async ()=>{
     console.error('Face comparison error:', err);
     debugEl.textContent += '\n[ERROR] ' + err.message;
     resultEl.style.display='block';
-    res
+    resultEl.textContent='Face comparison failed: ' + err.message;
+    resultEl.className='error';
+  }
+});
+</script>
+</body>
+</html>
