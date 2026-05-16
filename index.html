@@ -50,6 +50,27 @@ document.getElementById('location-check-btn').addEventListener('click', async ()
 
 document.getElementById('id-form').addEventListener('submit', async (e)=>{
   e.preventDefault();
+  const id = document.getElementById('employee-id').value.trim();
+
+  // Check if portrait images exist for this employee ID
+  const portraits = [`${id}_front.jpg`, `${id}_left.jpg`, `${id}_right.jpg`];
+  let hasPortraits = false;
+  for (const img of portraits) {
+    try {
+      await fetch(`assets/images/${img}`, { method: 'HEAD' });
+      hasPortraits = true;
+      break;
+    } catch {
+      // image not found, continue checking
+    }
+  }
+
+  if (!hasPortraits) {
+    document.getElementById('result').style.display='block';
+    document.getElementById('result').textContent=`No portrait found for employee ID: ${id}`;
+    return;
+  }
+
   setStep(3);
   document.getElementById('camera-section').style.display='block';
   try {
