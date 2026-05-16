@@ -20,31 +20,65 @@ export async function initFaceAPI(){
 export async function compareFaces(imageBlob, employeeId){
   const portraits = [`${employeeId}_front.jpg`, `${employeeId}_left.jpg`, `${employeeId}_right.jpg`];
 
-  // Load captured image and each portrait, then compare pixel similarity
+  // Step 1: Validate that at least one portrait file actually exists
+  let hasValidPortrait = false;
+  for (const portraitName of portraits) {
+    const exists = await new Promise((resolve) => {
+      const testImg = new Image();
+      testImg.onload = () => resolve(true);
+      testImg.onerror = () => resolve(false);
+      testImg.src = `assets/images/${portraitName}?${Date.now()}`;
+    });
+    if (exists) {
+      hasValidPortrait = true;
+      break;
+    }
+  }
+
+  console.log(`compareFaces: employeeId=${employeeId}, hasValidPortrait=${hasValidPortrait}`);
+
+  // If no portraits loaded, face not recognized
+  if (!hasValidPortrait) {
+    console.warn('No valid portrait images found — face not recognized');
+    return false;
+  }
+
+  // Step 2: Compare captured image against each existing portrait
   let bestScore = -1;
-  const threshold = 0.85; // 85% similarity to match
+  const threshold = 0.85;
 
   for (const portraitName of portraits) {
     try {
       const score = await compareImageWithPortrait(imageBlob, `assets/images/${portraitName}`);
+      console.log(`Portrait ${portraitName}: correlation = ${(score * 100).toFixed(1)}%`);
       if (score > bestScore) bestScore = score;
     } catch (err) {
-      console.warn(`Failed to load portrait ${portraitName}:`, err.message);
+      console.warn(`Failed to compare portrait ${portraitName}:`, err.message);
     }
   }
 
-  // If no portraits loaded successfully, face not recognized
-  if (bestScore < 0) return false;
+  // If no successful comparisons, face not recognized
+  if (bestScore < 0) {
+    console.warn('No valid comparison scores — face not recognized');
+    return false;
+  }
 
-  // Return true only if similarity exceeds threshold
-  return bestScore >= threshold;
+  const match = bestScore >= threshold;
+  console.log(`Best correlation: ${(bestScore * 100).toFixed(1)}%, threshold: ${(threshold * 100).toFixed(1)}% -> ${match ? 'MATCH' : 'NO MATCH'}`);
+  return match;
 }
 
 async function compareImageWithPortrait(imageBlob, portraitUrl){
   const img1 = await loadImageFromBlob(imageBlob);
   const img2 = await loadExternalImage(portraitUrl);
 
-  // Resize both images to the same dimensions for comparison
+  if (!img1 || !img1.naturalWidth || !img1.naturalHeight) {
+    throw new Error('Captured image is invalid');
+  }
+  if (!img2 || !img2.naturalWidth || !img2.naturalHeight) {
+    throw new Error('Portrait image is invalid');
+  }
+
   const size = 150;
   const c1 = document.createElement('canvas');
   const c2 = document.createElement('canvas');
@@ -56,23 +90,84 @@ async function compareImageWithPortrait(imageBlob, portraitUrl){
   ctx1.drawImage(img1, 0, 0, size, size);
   ctx2.drawImage(img2, 0, 0, size, size);
 
-  const data1 = ctx1.getImageData(0, 0, size, size).data;
-  const data2 = ctx2.getImageData(0, 0, size, size).data;
+  const d1 = ctx1.getImageData(0, 0, size, size).data;
+  const d2 = ctx2.getImageData(0, 0, size, size).data;
+  const n = size * size; // number of pixels
 
-  // Compute normalized correlation between pixel arrays
-  let sum = 0, sum1 = 0, sum2 = 0;
-  const len = data1.length;
-  for (let i = 0; i < len; i += 4) {
-    const p1 = data1[i]; // red channel
-    const p2 = data2[i];
-    sum += p1 * p2;
-    sum1 += p1 * p1;
-    sum2 += p2 * p2;
+  // --- Metric 1: Centered NCC (brightness-invariant structural similarity) ---
+  const m1 = new Float32Array(n);
+  const m2 = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    m1[i] = (d1[i * 4] + d1[i * 4 + 1] + d1[i * 4 + 2]) / 3;
+    m2[i] = (d2[i * 4] + d2[i * 4 + 1] + d2[i * 4 + 2]) / 3;
   }
 
-  const denominator = Math.sqrt(sum1 * sum2);
-  if (denominator === 0) return 0;
-  return sum / denominator;
+  const mean1 = m1.reduce((a, v) => a + v, 0) / n;
+  const mean2 = m2.reduce((a, v) => a + v, 0) / n;
+
+  let num = 0, den1 = 0, den2 = 0;
+  for (let i = 0; i < n; i++) {
+    const a = m1[i] - mean1;
+    const b = m2[i] - mean2;
+    num += a * b;
+    den1 += a * a;
+    den2 += b * b;
+  }
+
+  const ncc = (den1 > 0 && den2 > 0) ? num / (Math.sqrt(den1) * Math.sqrt(den2)) : 0;
+  const corr = Math.max(0, (ncc + 1) / 2); // map [-1,1] -> [0,1]
+
+  // --- Metric 2: Gradient structural match (Sobel edge comparison) ---
+  function gradientVec(data) {
+    const g = new Float32Array(n);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const idx = y * size + x;
+        const px = Math.min(x + 1, size - 1);
+        const py = Math.min(y + 1, size - 1);
+        const nx = Math.max(x - 1, 0);
+        const ny = Math.max(y - 1, 0);
+        const gx = (data[py * size + px] - data[ny * size + nx]) / 2;
+        const gy = (data[y * size + px] - data[y * size + nx]) / 2;
+        g[idx] = Math.sqrt(gx * gx + gy * gy);
+      }
+    }
+    return g;
+  }
+
+  const gray1 = new Float32Array(n);
+  const gray2 = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    gray1[i] = (d1[i * 4] + d1[i * 4 + 1] + d1[i * 4 + 2]) / 3;
+    gray2[i] = (d2[i * 4] + d2[i * 4 + 1] + d2[i * 4 + 2]) / 3;
+  }
+
+  const grad1 = gradientVec(gray1);
+  const grad2 = gradientVec(gray2);
+
+  let gNum = 0, gDen1 = 0, gDen2 = 0;
+  for (let i = 0; i < n; i++) {
+    gNum += grad1[i] * grad2[i];
+    gDen1 += grad1[i] * grad1[i];
+    gDen2 += grad2[i] * grad2[i];
+  }
+
+  const gDen = Math.sqrt(gDen1) * Math.sqrt(gDen2);
+  const gradientMatch = (gDen > 0) ? gNum / gDen : 0; // [0,1]
+
+  // --- Metric 3: MSE sanity check (penalizes large absolute differences) ---
+  let mse = 0;
+  for (let i = 0; i < n; i++) {
+    const diff = m1[i] - m2[i];
+    mse += diff * diff;
+  }
+  mse /= n;
+  const mseNorm = Math.min(mse / 10000, 1); // normalize to [0,1]
+  const mseScore = 1 - mseNorm;
+
+  // --- Combined score ---
+  const combined = corr * 0.5 + gradientMatch * 0.3 + mseScore * 0.2;
+  return Math.max(0, Math.min(1, combined));
 }
 
 function loadImageFromBlob(blob){
