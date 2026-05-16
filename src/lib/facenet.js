@@ -172,3 +172,84 @@ async function compareImageWithPortrait(croppedFaceBlob, portraitUrl){
 
   const grad1 = gradientMag(m1);
   const grad2 = gradientMag(m2);
+  let gNum = 0, gDen1 = 0, gDen2 = 0;
+  for (let i = 0; i < n; i++) {
+    gNum += grad1[i]*grad2[i]; gDen1 += grad1[i]*grad1[i]; gDen2 += grad2[i]*grad2[i];
+  }
+  const gDen = Math.sqrt(gDen1) * Math.sqrt(gDen2);
+  const gradientMatch = (gDen > 0) ? gNum / gDen : 0;
+
+  // Metric 3: MSE-based score
+  let mse = 0;
+  for (let i = 0; i < n; i++) { const d = m1[i]-m2[i]; mse += d*d; }
+  mse /= n;
+  const mseScore = 1 - Math.min(mse / 10000, 1);
+
+  const combined = corr * 0.5 + gradientMatch * 0.3 + mseScore * 0.2;
+  const finalScore = Math.max(0, Math.min(1, combined));
+
+  console.log(`[compare] corr=${corr.toFixed(3)} grad=${gradientMatch.toFixed(3)} mse=${mseScore.toFixed(3)} -> ${finalScore.toFixed(3)}`);
+  return finalScore;
+}
+
+// Load portrait and crop to face region only
+async function loadAndCropPortrait(portraitUrl){
+  const img = await loadExternalImage(portraitUrl);
+  const detection = await faceapi.detectSingleFace(img).withFaceLandmarks();
+  if (!detection) {
+    throw new Error('No face detected in portrait');
+  }
+
+  const box = detection.box;
+  // Add padding around face (20% margin)
+  const padX = Math.floor(box.width * 0.2);
+  const padY = Math.floor(box.height * 0.2);
+  const x = Math.max(0, box.x - padX);
+  const y = Math.max(0, box.y - padY);
+  const w = Math.min(img.naturalWidth - x, box.width + padX * 2);
+  const h = Math.min(img.naturalHeight - y, box.height + padY * 2);
+
+  // Create cropped face region via canvas data URL
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, x, y, w, h, 0, 0, w, h);
+
+  return new Promise((resolve, reject) => {
+    const imgClone = new Image();
+    imgClone.onload = () => resolve(imgClone);
+    imgClone.onerror = () => reject(new Error('Failed to load cropped portrait'));
+    imgClone.src = canvas.toDataURL();
+  });
+}
+
+function loadImageFromBlob(imageBlob){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to load image from blob'));
+    img.src = URL.createObjectURL(imageBlob);
+  });
+}
+
+function loadExternalImage(url){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to load external image'));
+    img.src = url;
+  });
+}
+
+export async function detectFace(imageBlob){
+  if (typeof faceapi === 'undefined') {
+    throw new Error('face-api.js not loaded');
+  }
+  const image = await loadImageFromBlob(imageBlob);
+  const detection = await faceapi.detectSingleFace(image).withFaceLandmarks();
+  if (!detection) {
+    throw new Error('No face detected in the image');
+  }
+  return detection;
+}
