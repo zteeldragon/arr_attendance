@@ -24,7 +24,7 @@ export async function compareFaces(imageBlob, employeeId){
 
   // Try to compare against each portrait; skip ones that fail to load
   let bestScore = -1;
-  const threshold = 0.85;
+  const threshold = 0.65;
   let triedCount = 0;
 
   for (const portraitName of portraits) {
@@ -36,6 +36,9 @@ export async function compareFaces(imageBlob, employeeId){
       if (score > bestScore) bestScore = score;
     } catch (err) {
       console.warn(`Failed to compare portrait ${portraitName}:`, err.message);
+      // Store error for debugging
+      window.__facenetError = window.__facenetError || [];
+      window.__facenetError.push({ portrait: portraitName, error: err.message });
     }
   }
 
@@ -43,6 +46,12 @@ export async function compareFaces(imageBlob, employeeId){
 
   if (triedCount === 0) {
     console.error('compareFaces: NO portraits could be loaded at all');
+    // Return a visible error indicator by appending to result div
+    const resultEl = document.getElementById('result');
+    if (resultEl) {
+      resultEl.style.display = 'block';
+      resultEl.textContent = `Face not recognized. Reject. [DEBUG: triedCount=0, portraits=${portraits.join(',')}]. Check debug-log div for details.`;
+    }
     return false;
   }
 
@@ -55,11 +64,13 @@ async function compareImageWithPortrait(imageBlob, portraitUrl){
   const img1 = await loadImageFromBlob(imageBlob);
   const img2 = await loadExternalImage(portraitUrl);
 
+  console.log(`[compare] loaded: img1=${img1?.naturalWidth}x${img1?.naturalHeight}, img2=${img2?.naturalWidth}x${img2?.naturalHeight}`);
+
   if (!img1 || !img1.naturalWidth || !img1.naturalHeight) {
-    throw new Error('Captured image is invalid');
+    throw new Error('Captured image is invalid (w=' + (img1?.naturalWidth||0) + ' h=' + (img1?.naturalHeight||0) + ')');
   }
   if (!img2 || !img2.naturalWidth || !img2.naturalHeight) {
-    throw new Error('Portrait image is invalid');
+    throw new Error('Portrait image is invalid (w=' + (img2?.naturalWidth||0) + ' h=' + (img2?.naturalHeight||0) + ')');
   }
 
   const size = 150;
