@@ -44,6 +44,7 @@
     <button id="capture-btn">Capture Face</button>
   </div>
   <div id="result" style="display:none;"></div>
+  <div id="debug-log" style="display:none;margin-top:16px;font-size:0.8rem;text-align:left;background:#222;color:#0f0;padding:12px;border-radius:8px;max-height:300px;overflow:auto;word-break:break-all;"></div>
   <a id="download-link" href="#" download="attendance.csv" style="display:none;">Download Attendance Log</a>
 </div>
 <script type="module">
@@ -51,6 +52,18 @@ import { checkLocation } from './src/services/geolocation.js';
 import { initCamera, captureImage } from './src/services/cameraCapture.js';
 import { initFaceAPI, compareFaces } from './src/lib/facenet.js';
 import { logAttendance, downloadCSV } from './src/services/csvLogger.js';
+
+// Verify imports succeeded
+const missing = [];
+if (typeof checkLocation !== 'function') missing.push('checkLocation');
+if (typeof captureImage !== 'function') missing.push('captureImage');
+if (typeof compareFaces !== 'function') missing.push('compareFaces');
+if (typeof logAttendance !== 'function') missing.push('logAttendance');
+if (missing.length > 0) {
+  console.error('[FATAL] ES module import failed. Missing:', missing.join(', '));
+  const app = document.getElementById('app');
+  app.innerHTML = '<h2 style="color:red;">Module Import Failed</h2><p>Missing: ' + missing.join(', ') + '</p><p>This usually means .js files are not served with application/javascript MIME type.</p>';
+}
 
 const officeLat = 13.77591720691935;
 const officeLng = 100.53495484101782;
@@ -118,9 +131,19 @@ captureBtn.addEventListener('click', async ()=>{
   await initFaceAPI();
   const id=document.getElementById('employee-id').value;
   const resultEl=document.getElementById('result');
+  const debugEl=document.getElementById('debug-log');
+
+  // Show debug info on screen
+  debugEl.style.display='block';
+  debugEl.textContent='[DEBUG] captureFaces defined: ' + (typeof compareFaces) + ', id: ' + id + ', blob size: ' + (imgBlob ? imgBlob.size : 0);
 
   try {
+    if (typeof compareFaces !== 'function') {
+      throw new Error('compareFaces is NOT defined! ES module import may have failed. Check console for errors.');
+    }
+
     const match = await compareFaces(imgBlob, id);
+    debugEl.textContent += '\n[DEBUG] compareFaces returned: ' + match;
     console.log(`compareFaces returned: ${match}`);
     if (match) {
       resultEl.style.display='block';
@@ -135,8 +158,9 @@ captureBtn.addEventListener('click', async ()=>{
     }
   } catch (err) {
     console.error('Face comparison error:', err);
+    debugEl.textContent += '\n[ERROR] ' + err.message;
     resultEl.style.display='block';
-    resultEl.textContent=`Face comparison failed: ${err.message}`;
+    resultEl.textContent='Face comparison failed: ' + err.message;
     resultEl.className='error';
   }
 });
