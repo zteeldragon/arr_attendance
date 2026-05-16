@@ -48,11 +48,17 @@ document.getElementById('location-check-btn').addEventListener('click', async ()
   document.getElementById('id-form').style.display='block';
 });
 
-document.getElementById('id-form').addEventListener('submit',e=>{
+document.getElementById('id-form').addEventListener('submit', async (e)=>{
   e.preventDefault();
   setStep(3);
   document.getElementById('camera-section').style.display='block';
-  initCamera();
+  try {
+    await initCamera();
+  } catch (err) {
+    console.error('Failed to start camera:', err);
+    document.getElementById('result').style.display='block';
+    document.getElementById('result').textContent='Camera access denied. Please allow camera and try again.';
+  }
 });
 
 const captureBtn=document.getElementById('capture-btn');
