@@ -13,6 +13,6 @@ export function downloadCSV(){
   const link=document.getElementById('download-link');
   if(link){
     link.href=url;
-    link.style.display='inline';
+    link.style.display='block';
   }
 }
