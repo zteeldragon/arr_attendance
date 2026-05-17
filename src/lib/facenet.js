@@ -40,7 +40,8 @@ export async function compareFaces(imageBlob, employeeId){
   for (const portraitName of portraits) {
     const url = `assets/images/${portraitName}`;
     try {
-      const score = await compareImageWithPortrait(croppedFace, url);
+      const img1Blob = croppedFace || imageBlob;
+      const score = await compareImageWithPortrait(img1Blob, url, imageBlob);
       triedCount++;
       console.log(`Portrait ${portraitName}: score=${score.toFixed(3)}`);
       if (score > bestScore) bestScore = score;
@@ -102,14 +103,20 @@ async function getCroppedFace(imageBlob){
   });
 }
 
-async function compareImageWithPortrait(croppedFaceBlob, portraitUrl){
-  // Load the cropped face (or full image if cropping failed)
+async function compareImageWithPortrait(croppedFaceBlob, portraitUrl, originalBlob){
+  // Load the captured image (cropped or full fallback)
   const img1 = await loadImageFromBlob(croppedFaceBlob);
 
-  // Load and crop portrait face region too
+  // Load and crop portrait face region too — try cropped first, fall back to full
   let img2;
   if (typeof faceapi !== 'undefined' && modelsLoaded) {
-    img2 = await loadAndCropPortrait(portraitUrl);
+    try {
+      img2 = await loadAndCropPortrait(portraitUrl);
+    } catch (e) {
+      console.warn(`Portrait crop failed for ${portraitUrl}, using full image:`, e.message);
+      // Use original uncaptured blob so both sides are same format (uncropped)
+      img2 = await loadImageFromBlob(originalBlob);
+    }
   } else {
     img2 = await loadExternalImage(portraitUrl);
   }
